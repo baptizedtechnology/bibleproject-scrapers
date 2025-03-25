@@ -2,11 +2,27 @@ import logging
 import re
 from bs4 import BeautifulSoup
 from pathlib import Path
+import time
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+    
 
 from scrapers.base import BaseScraper
-from utils.helpers import extract_text_from_pdf, extract_metadata_from_filename, clean_filename
+from utils.helpers import extract_text_from_pdf, clean_filename, merge_metadata
 
 logger = logging.getLogger(__name__)
+
+#Required metadata for study_notes will be type article with format below.
+CONTENT_TYPE = 'article'
+#However, we can only fill in the author and publication date for now. Page will be filled during chunking.
+'''
+{
+    "page": 5,
+    "author": "Sarah Johnson",
+    "publication_date": "2024-05-20"
+}
+'''
 
 class StudyNotesScraper(BaseScraper):
     """Scraper for BibleProject study notes"""
@@ -14,7 +30,8 @@ class StudyNotesScraper(BaseScraper):
     def __init__(self):
         super().__init__(name="Study_Notes")
         self.study_notes_url = "https://bibleproject.com/downloads/study-notes/"
-    
+        self.source_type = CONTENT_TYPE
+        
     def scrape(self) -> bool:
         """
         Scrape BibleProject study notes
@@ -34,37 +51,33 @@ class StudyNotesScraper(BaseScraper):
             # Parse the page
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Find all download cards
-            download_cards = soup.select('div.download-bundles-card-image')
-            logger.info(f"Found {len(download_cards)} study note download cards")
-            self.items_found = len(download_cards)
+            # Find all download bundle cards (parent containers)
+            download_bundle_cards = soup.select('div.download-bundles-card')
+            logger.info(f"Found {len(download_bundle_cards)} study note download cards")
+            self.items_found = len(download_bundle_cards)
             
             # Process each download card
-            for card in download_cards:
+            for card in download_bundle_cards:
+                if card == download_bundle_cards[1]:
+                    break
                 try:
-                    # Find the parent element with the link
-                    link_element = card.find_parent('a')
-                    if not link_element:
-                        logger.warning("Could not find download link for a study note card")
+                    # Extract the resource ID
+                    resource_id = card.get('data-popout-resource-id')
+                    if not resource_id:
+                        logger.warning("Could not find resource ID in card")
                         continue
                     
-                    # Get the download link
-                    resource_link = link_element.get('href')
-                    if not resource_link:
-                        continue
-                    
-                    # Make sure the link is absolute
-                    if not resource_link.startswith('http'):
-                        resource_link = f"https://bibleproject.com{resource_link}"
-                    
-                    # Get the resource title from the card if available
-                    title_element = card.find_next('div', class_='download-bundles-card-title')
+                    # Find the title element
+                    title_element = card.select_one('div.download-bundles-card-title')
                     title = title_element.text.strip() if title_element else "Study Notes"
                     
-                    logger.info(f"Processing study note: {title} ({resource_link})")
+                    logger.info(f"Processing study note: {title} (ID: {resource_id})")
                     
-                    # Get the resource page
-                    self._process_resource_page(resource_link, title)
+                    # Get the download link directly from the popout
+                    download_url = f"https://bibleproject.com/view-resource/{resource_id}/"
+                    
+                    # Process the download link
+                    self._process_download_link(download_url, title)
                     
                 except Exception as e:
                     logger.exception(f"Error processing resource card: {e}")
@@ -78,84 +91,159 @@ class StudyNotesScraper(BaseScraper):
             logger.exception(f"Error scraping study notes: {e}")
             self.record_scrape_results(status='failed', error=str(e))
             return False
-    
-    def _process_resource_page(self, resource_url, title):
-        """Process a resource page to get the PDF download link"""
         
-        response = self.make_request(resource_url)
-        if not response:
-            logger.warning(f"Failed to load resource page: {resource_url}")
-            return
+    def _process_download_link(self, download_url, title):
+        """Process a download link to get the PDF using headless browser"""
         
-        soup = BeautifulSoup(response.text, 'html.parser')
+        logger.info(f"Processing download link: {download_url} for {title}")
         
-        # Look for the download button
-        download_btn = soup.select_one('a.resource-popout-button')
-        if not download_btn:
-            logger.warning(f"Could not find download button on page: {resource_url}")
-            return
+        try:
+            # Get PDF URL using headless browser
+            pdf_url = self._get_pdf_url_with_selenium(download_url)
+            
+            if not pdf_url:
+                logger.error(f"Failed to get PDF URL for {title}")
+                return
+                
+            logger.info(f"Found PDF URL: {pdf_url}")
+            
+            # Extract the filename from the URL
+            pdf_name = pdf_url.split('/')[-1]
+            if not pdf_name or not pdf_name.lower().endswith('.pdf'):
+                pdf_name = f"{clean_filename(title)}.pdf"
+            
+            # Download the PDF
+            pdf_path = self.download_file(pdf_url, pdf_name)
+            if not pdf_path:
+                logger.warning(f"Failed to download PDF from: {pdf_url}")
+                return
+            
+            # Process the PDF content
+            self._process_pdf(pdf_path, title, pdf_url)
+            
+        except Exception as e:
+            logger.exception(f"Error processing download link {download_url}: {e}")
+
+    def _get_pdf_url_with_selenium(self, url):
+        """
+        Get the final PDF URL using Selenium headless browser
         
-        # Get the download link
-        download_link = download_btn.get('href')
-        if not download_link:
-            logger.warning(f"No download link found in button: {resource_url}")
-            return
+        Args:
+            url: The initial URL to navigate to
+            
+        Returns:
+            str: The final PDF URL or None if not found
+        """
+        import time
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.chrome.service import Service
         
-        # Make sure the link is absolute
-        if not download_link.startswith('http'):
-            download_link = f"https://bibleproject.com{download_link}"
+        logger.info(f"Getting PDF URL with headless browser: {url}")
         
-        # Extract the PDF file name from the URL
-        pdf_name = download_link.split('/')[-1]
-        if not pdf_name or not pdf_name.lower().endswith('.pdf'):
-            pdf_name = f"{clean_filename(title)}.pdf"
-        
-        # Download the PDF
-        pdf_path = self.download_file(download_link, pdf_name)
-        if not pdf_path:
-            logger.warning(f"Failed to download PDF: {download_link}")
-            return
-        
-        # Process the PDF content
-        self._process_pdf(pdf_path, title, resource_url)
+        try:
+            # Set up Chrome options
+            options = Options()
+            options.add_argument("--headless")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--window-size=1920,1080")
+            options.add_argument(f"user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+            
+            # Initialize Chrome driver
+            driver = webdriver.Chrome(options=options)
+            
+            # Navigate to URL
+            driver.get(url)
+            
+            # Wait for redirects to complete
+            time.sleep(3)  # Adjust timing based on site behavior
+            
+            # Get the final URL
+            final_url = driver.current_url
+            
+            # Check if we've reached a PDF URL
+            if final_url.lower().endswith('.pdf'):
+                return final_url
+            
+            # If not a PDF URL directly, check if there's a PDF viewer
+            if 'pdf' in final_url.lower() or 'view-resource' in final_url.lower():
+                # Try to find PDF URL in page source
+                page_source = driver.page_source
+                
+                # Look for cloudfront links which often host PDFs
+                import re
+                pdf_links = re.findall(r'https://[^"\']+\.pdf', page_source)
+                
+                if pdf_links:
+                    return pdf_links[0]
+            
+            # Close the driver
+            driver.quit()
+            
+            if not final_url.lower().endswith('.pdf'):
+                logger.warning(f"Final URL is not a PDF: {final_url}")
+                return None
+                
+            return final_url
+            
+        except Exception as e:
+            logger.exception(f"Error getting PDF URL with Selenium: {e}")
+            return None
+            
+        finally:
+            # Make sure to quit the driver
+            try:
+                if 'driver' in locals():
+                    driver.quit()
+            except:
+                pass
     
     def _process_pdf(self, pdf_path: Path, title: str, source_url: str):
         """Process a downloaded PDF file"""
-        print("Reached _process_pdf")
+        logger.info(f"Processing PDF: {pdf_path}")
         
-        # try:
-        #     # Extract text from PDF
-        #     pdf_text = extract_text_from_pdf(pdf_path)
+        try:
+            # Extract text from PDF
+            pdf_text = extract_text_from_pdf(pdf_path)
             
-        #     if not pdf_text:
-        #         logger.warning(f"Could not extract text from PDF: {pdf_path}")
-        #         return
+            if not pdf_text:
+                logger.warning(f"Could not extract text from PDF: {pdf_path}")
+                return
+        
+
+            base_metadata = {
+                "author": "BibleProject",
+                #FIXME: Cannot find publication date info. Will use past date for now.
+                "publication_date": "2024-05-20",
+            }
+
+            extra_metadata = {
+                "title": title,
+                "source_url": source_url,
+                "scraper": self.name,
+            }
+
+            # Merge metadata
+            metadata = merge_metadata(
+                base_metadata=base_metadata, 
+                new_metadata=extra_metadata
+            )
             
-        #     # Get metadata from filename
-        #     metadata = extract_metadata_from_filename(pdf_path.name)
+            # Add content to database
+            added = self.add_content(
+                url=source_url,
+                content=pdf_text,
+                title=title,
+                content_type=CONTENT_TYPE,
+                metadata=metadata
+            )
             
-        #     # Add source info to metadata
-        #     metadata.update({
-        #         'title': title,
-        #         'source_url': source_url,
-        #         'file_path': str(pdf_path),
-        #         'file_size': pdf_path.stat().st_size,
-        #         'scraper': self.name
-        #     })
-            
-        #     # Add content to database
-        #     added = self.add_content(
-        #         url=source_url,
-        #         content=pdf_text,
-        #         title=title,
-        #         content_type='study_notes',
-        #         metadata=metadata
-        #     )
-            
-        #     if added:
-        #         logger.info(f"Added new study note: {title}")
-        #     else:
-        #         logger.info(f"Study note already exists: {title}")
+            if added:
+                logger.info(f"Added new study note: {title}")
+            else:
+                logger.info(f"Study note already exists: {title}")
                 
-        # except Exception as e:
-        #     logger.exception(f"Error processing PDF {pdf_path}: {e}")
+        except Exception as e:
+            logger.exception(f"Error processing PDF {pdf_path}: {e}")

@@ -34,7 +34,8 @@ class BaseScraper(ABC):
     
     def make_request(self, url: str, method: str = 'GET', 
                     params: Dict = None, data: Dict = None, 
-                    retry_count: int = 3, retry_delay: int = 5) -> Optional[requests.Response]:
+                    retry_count: int = 3, retry_delay: int = 5,
+                    allow_redirects: bool = True, stream: bool = False) -> Optional[requests.Response]:
         """
         Make an HTTP request with rate limiting and retry logic
         
@@ -59,7 +60,9 @@ class BaseScraper(ABC):
                     url=url,
                     params=params,
                     data=data,
-                    timeout=REQUEST_TIMEOUT
+                    timeout=REQUEST_TIMEOUT,
+                    allow_redirects=allow_redirects,
+                    stream=stream
                 )
                 response.raise_for_status()
                 return response
@@ -104,8 +107,8 @@ class BaseScraper(ABC):
             logger.error(f"Error downloading {url}: {e}")
             return None
     
-    def add_content(self, url: str, content: str, title: str = None, 
-                   content_type: str = 'text', metadata: Dict = None) -> bool:
+    def add_content(self, url: str, content: str, title: str, 
+                   content_type: str, metadata: Dict) -> bool:
         """
         Add new content to the index if not already present
         

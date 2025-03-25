@@ -26,38 +26,37 @@ def clean_filename(filename: str) -> str:
     # Remove leading/trailing underscores and spaces
     return clean.strip('_').strip()
 
-def extract_text_from_pdf(pdf_path: Path) -> str:
+def extract_text_from_pdf(pdf_path):
     """
-    Extract text content from a PDF file
+    Extract text from a PDF file
     
     Args:
         pdf_path: Path to the PDF file
         
     Returns:
-        Extracted text
+        str: Extracted text or empty string if failed
     """
     try:
-        text_content = []
+        import fitz  # PyMuPDF
         
-        # Open the PDF
-        with fitz.open(pdf_path) as pdf:
-            # Process each page
-            for page_num in range(len(pdf)):
-                page = pdf[page_num]
-                # Extract text from the page
-                text = page.get_text()
-                text_content.append(text)
+        text = ""
+        page_texts = []
         
-        # Join all pages
-        full_text = "\n".join(text_content)
+        with fitz.open(pdf_path) as doc:
+            total_pages = len(doc)
+            
+            for i, page in enumerate(doc):
+                page_text = page.get_text()
+                page_texts.append(page_text)
+                text += page_text
+                
+                # Add page markers for later chunking reference
+                if i < total_pages - 1:
+                    text += f"\n[PAGE_BREAK_{i+1}]\n"
         
-        # Basic cleanup
-        full_text = re.sub(r'\n{3,}', '\n\n', full_text)  # Remove excessive newlines
-        
-        return full_text
-        
+        return text
     except Exception as e:
-        logger.error(f"Error extracting text from {pdf_path}: {e}")
+        logging.exception(f"Error extracting text from PDF {pdf_path}: {e}")
         return ""
 
 def split_text_into_chunks(text: str, max_size: int = 4000, overlap: int = 200) -> List[str]:
@@ -144,42 +143,84 @@ def split_text_into_chunks(text: str, max_size: int = 4000, overlap: int = 200) 
     
     return chunks
 
-def extract_metadata_from_filename(filename: str) -> Dict[str, Any]:
+def get_metadata_template(content_type: str) -> Dict[str, Any]:
     """
-    Extract metadata from a study notes filename
+    Get a metadata template with required fields for a specific content type
     
     Args:
-        filename: PDF filename
+        content_type: Type of content (book, podcast, etc.)
         
     Returns:
-        Dictionary of metadata
+        Dict: Template with required metadata fields initialized with None
     """
-    metadata = {
-        "source": "BibleProject Study Notes",
-        "document_type": "study_notes",
-        "extracted_date": datetime.now().isoformat()
+    templates = {
+        'book': {
+            'isbn': None,
+            'publisher': None, 
+            'publication_year': None,
+            'author': None,
+            'page': None
+        },
+        'podcast': {
+            'episode_number': None,
+            'episode_title': None,
+            'timestamp': None,
+            'duration': None
+        },
+        'article': {
+            'page': None,
+            'publication_date': None,
+            'author': None
+        },
+        'video': {
+            'timestamp': None,
+            'platform': None,
+            'video_length': None
+        },
+        'speech': {
+            'speaker': None,
+            'speech_date': None
+        },
+        'research_paper': {
+            'title': None,
+            'author': None,
+            'publication_year': None,
+            'journal_name': None,
+            'doi': None
+        },
+        'blog': {
+            'author': None,
+            'publication_date': None,
+            'url': None
+        },
+        'website': {
+            'url': None,
+            'author': None
+        },
+        'bible': {
+            'verse': None,
+            'chapter': None,
+            'book': None,
+            'translation': None
+        }
     }
     
-    # Extract book name if present
-    book_match = re.search(r'(Genesis|Exodus|Leviticus|Numbers|Deuteronomy|Joshua|Judges|Ruth|'
-                           r'1 Samuel|2 Samuel|1 Kings|2 Kings|1 Chronicles|2 Chronicles|'
-                           r'Ezra|Nehemiah|Esther|Job|Psalms|Proverbs|Ecclesiastes|'
-                           r'Song of Songs|Isaiah|Jeremiah|Lamentations|Ezekiel|Daniel|'
-                           r'Hosea|Joel|Amos|Obadiah|Jonah|Micah|Nahum|Habakkuk|Zephaniah|'
-                           r'Haggai|Zechariah|Malachi|Matthew|Mark|Luke|John|Acts|Romans|'
-                           r'1 Corinthians|2 Corinthians|Galatians|Ephesians|Philippians|'
-                           r'Colossians|1 Thessalonians|2 Thessalonians|1 Timothy|2 Timothy|'
-                           r'Titus|Philemon|Hebrews|James|1 Peter|2 Peter|1 John|2 John|'
-                           r'3 John|Jude|Revelation)', filename, re.IGNORECASE)
+    # Return requested template or empty dict if type not found
+    return templates.get(content_type, {}).copy()
+
+def merge_metadata(base_metadata: Dict[str, Any], 
+                  new_metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Merge new metadata into base metadata
     
-    if book_match:
-        metadata["book"] = book_match.group(1)
-    
-    # Extract series/theme if present
-    theme_match = re.search(r'(Torah|Wisdom|Prophets|Gospel|Epistles|Apocalyptic|'
-                           r'Biblical Themes|Character|Word Study)', filename, re.IGNORECASE)
-    
-    if theme_match:
-        metadata["theme"] = theme_match.group(1)
+    Args:
+        base_metadata: Base metadata dictionary
+        new_metadata: New metadata to merge
         
-    return metadata
+    Returns:
+        Dict: Merged metadata dictionary
+    """
+    # Update base metadata with new metadata
+    base_metadata.update(new_metadata)
+    
+    return base_metadata

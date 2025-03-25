@@ -114,8 +114,8 @@ class SupabaseManager:
                 'content_type': content_type,
                 'title': title,
                 'status': 'pending',
-                'metadata': metadata or {},
-                'discovered_at': datetime.now().isoformat()
+                'metadata': metadata,
+                'discovered_at': datetime.now().isoformat(),
             }
             
             # Insert record
