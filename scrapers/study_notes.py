@@ -58,8 +58,6 @@ class StudyNotesScraper(BaseScraper):
             
             # Process each download card
             for card in download_bundle_cards:
-                if card == download_bundle_cards[1]:
-                    break
                 try:
                     # Extract the resource ID
                     resource_id = card.get('data-popout-resource-id')
