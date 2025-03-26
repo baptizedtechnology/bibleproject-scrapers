@@ -200,7 +200,7 @@ class StudyNotesScraper(BaseScraper):
             except:
                 pass
     
-    def _process_pdf(self, pdf_path: Path, title: str, source_url: str):
+    def _process_pdf(self, pdf_path: Path, title: str, download_url: str):
         """Process a downloaded PDF file"""
         logger.info(f"Processing PDF: {pdf_path}")
         
@@ -215,13 +215,13 @@ class StudyNotesScraper(BaseScraper):
 
             base_metadata = {
                 "author": "BibleProject",
-                #FIXME: Cannot find publication date info. Will use past date for now.
+                #NOTE: Cannot find publication date info. Will use past date for now.
                 "publication_date": "2024-05-20",
             }
 
             extra_metadata = {
                 "title": title,
-                "source_url": source_url,
+                "download_url": download_url,
                 "scraper": self.name,
             }
 
@@ -233,7 +233,7 @@ class StudyNotesScraper(BaseScraper):
             
             # Add content to database
             added = self.add_content(
-                url=source_url,
+                download_url=download_url,
                 content=pdf_text,
                 title=title,
                 content_type=CONTENT_TYPE,

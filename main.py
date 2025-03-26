@@ -7,6 +7,7 @@ from datetime import datetime
 # from scrapers.podcasts import PodcastScraper
 # from scrapers.classroom import ClassroomScraper
 from scrapers.study_notes import StudyNotesScraper
+from utils.helpers import cleanup_temp_files
 
 # Setup logging
 logging.basicConfig(
@@ -49,15 +50,20 @@ def scrape_study_notes():
         logger.info(f"Study notes scraping completed successfully. Found {study_notes_scraper.items_found} items, added {study_notes_scraper.items_new} new items.")
     else:
         logger.error("Study notes scraping failed")
+
 def process_pending():
     """
     Process any pending content (transcribe audio, create embeddings)
     """
     logger.info("Processing pending content")
-    # Import processor here to avoid circular imports
-    # from processors.runner import process_pending_content
-    # process_pending_content()
-    logger.info("Content processing not yet implemented")
+    from processors.runner import process_pending_content
+    
+    processed_count = process_pending_content()
+    
+    if processed_count > 0:
+        logger.info(f"Successfully processed {processed_count} pending items")
+    else:
+        logger.info("No pending items processed")
 
 def main():
     """Main entry point for the scraper"""
@@ -90,9 +96,11 @@ def main():
             process_pending()
             
         logger.info("Scraping completed successfully")
+        cleanup_temp_files()
         
     except Exception as e:
         logger.exception(f"Error during scraping: {e}")
+        cleanup_temp_files()
         sys.exit(1)
 
 if __name__ == "__main__":

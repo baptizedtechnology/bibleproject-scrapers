@@ -14,12 +14,12 @@ class BaseProcessor(ABC):
     Designed for reuse across projects - this file can be extracted
     into a shared library after project completion.
     """
-    def __init__(self, content_type: str):
+    def __init__(self, content_type: Optional[str] = None):
         """
         Initialize processor
         
         Args:
-            content_type: Type of content this processor handles
+            content_type: Type of content this processor handles (None for all types). Defaults to None.
         """
         self.content_type = content_type
         self.db = SupabaseManager()
@@ -37,7 +37,7 @@ class BaseProcessor(ABC):
             List of processed content chunks
         """
         pass
-    
+        
     def process_pending_items(self, limit: int = 10) -> int:
         """
         Process pending items from the database for this content type
@@ -48,13 +48,15 @@ class BaseProcessor(ABC):
         Returns:
             Number of successfully processed items
         """
+
+        #Returns DB entries from 'scrape_content_index' table that are pending
         pending_items = self.db.get_pending_content(content_type=self.content_type, limit=limit)
         processed_count = 0
         
         for item in pending_items:
             try:
                 # Process the content into chunks
-                content = item.get('content', '')
+                content = item.get('text_content', '')
                 metadata = item.get('metadata', {})
                 
                 if not content:
@@ -62,28 +64,28 @@ class BaseProcessor(ABC):
                     self.db.update_content_status(item['id'], 'failed', chatbot_source_id=None)
                     continue
                 
-                chunks = self.process_content(content, metadata)
+                # Process content returns a list of dicts with 'text' and 'metadata'
+                chunk_objects = self.process_content(content, metadata)
                 
                 # Store each chunk in the database
-                for i, chunk in enumerate(chunks):
-                    # Update metadata with chunk info
-                    chunk_metadata = metadata.copy()
-                    chunk_metadata.update({
-                        'chunk_index': i,
-                        'total_chunks': len(chunks),
-                        'original_content_id': item['id']
-                    })
+                for i, chunk_obj in enumerate(chunk_objects):
+                    chunk_text = chunk_obj['text']
+                    chunk_metadata = chunk_obj['metadata']
+                    
+                    # Add original content ID to metadata
+                    chunk_metadata['original_content_id'] = item['id']
                     
                     # Create a title for this chunk
-                    chunk_title = f"{item.get('title', 'Untitled')} (Part {i+1}/{len(chunks)})"
+                    chunk_title = f"{item.get('title', 'Untitled')}"
                     
                     # Add to chatbot sources
-                    # In a real implementation, this would include embedding generation
+                    #ChatbotID is handled in the 'add_to_chatbot_sources' function
+                    link_url = item.get('source_url') or item.get('download_url')
                     chatbot_source_id = self.db.add_to_chatbot_sources(
-                        content=chunk,
+                        content=chunk_text,
                         title=chunk_title,
-                        source_url=item['url'],
-                        content_type=self.content_type,
+                        source_url=link_url,
+                        content_type=item['content_type'],
                         metadata=chunk_metadata,
                         content_index_id=item['id']
                     )
@@ -92,8 +94,8 @@ class BaseProcessor(ABC):
                 self.db.update_content_status(
                     item['id'], 
                     'processed', 
-                    processed_content=None,  # We don't need to store the processed content again
-                    chatbot_source_id=None  # We created multiple sources, so no single ID
+                    processed_content=None,
+                    chatbot_source_id=None
                 )
                 
                 processed_count += 1

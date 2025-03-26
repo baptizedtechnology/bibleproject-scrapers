@@ -15,8 +15,8 @@ class TextProcessor(BaseProcessor):
     Designed for reuse across projects - this file can be extracted
     into a shared library after project completion.
     """
-    def __init__(self):
-        super().__init__(content_type='text')
+    def __init__(self, content_type: Optional[str] = None):
+        super().__init__(content_type=content_type)
     
     def clean_text(self, text: str) -> str:
         """
@@ -50,57 +50,8 @@ class TextProcessor(BaseProcessor):
         
         return text.strip()
     
-    def extract_structured_content(self, text: str) -> Dict[str, Any]:
-        """
-        Extract structured information from text when possible
-        
-        Args:
-            text: Cleaned text content
-            
-        Returns:
-            Dictionary with extracted structure
-        """
-        result = {'full_text': text}
-        
-        # Try to extract title
-        title_match = re.match(r'^(.*?)\n', text)
-        if title_match:
-            result['extracted_title'] = title_match.group(1).strip()
-        
-        # Try to extract sections (simplified)
-        sections = []
-        current_section = None
-        current_content = []
-        
-        for line in text.split('\n'):
-            # Simple heuristic for section headers: short, uppercase lines
-            if len(line) < 50 and line.isupper() and line.strip():
-                # Save previous section
-                if current_section:
-                    sections.append({
-                        'heading': current_section,
-                        'content': '\n'.join(current_content)
-                    })
-                
-                # Start new section
-                current_section = line.strip()
-                current_content = []
-            else:
-                current_content.append(line)
-        
-        # Don't forget the last section
-        if current_section:
-            sections.append({
-                'heading': current_section,
-                'content': '\n'.join(current_content)
-            })
-        
-        if sections:
-            result['sections'] = sections
-        
-        return result
-    
-    def process_content(self, content: str, metadata: Dict[str, Any]) -> List[str]:
+    #FIXME: This will need to be updated to handle different types of text content since we need different metadata for each
+    def process_content(self, content: str, metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Process text content into chunks suitable for the RAG system
         
@@ -109,21 +60,36 @@ class TextProcessor(BaseProcessor):
             metadata: Content metadata
             
         Returns:
-            List of processed content chunks
+            List of processed chunk objects with text and metadata
         """
+        
         # Clean the text
         cleaned_text = self.clean_text(content)
         
-        # Extract structure if possible
-        structured_content = self.extract_structured_content(cleaned_text)
-        
         # Get the text to chunk
-        text_to_chunk = structured_content.get('full_text', cleaned_text)
+        text_to_chunk = cleaned_text
         
-        # Split into chunks
-        chunks = split_text_into_chunks(text_to_chunk, 
-                                       max_size=MAX_CONTENT_CHUNK_SIZE,
-                                       overlap=200)
+        # Split into chunks with page information
+        chunk_objects = split_text_into_chunks(text_to_chunk, 
+                                            max_size=MAX_CONTENT_CHUNK_SIZE,
+                                            overlap=200)
         
-        logger.info(f"Split content into {len(chunks)} chunks")
-        return chunks
+        # Create full chunk objects with metadata
+        processed_chunks = []
+        for i, chunk_obj in enumerate(chunk_objects):
+            # Update metadata with chunk information
+            chunk_metadata = metadata.copy() if metadata else {}
+            chunk_metadata.update({
+                'chunk_index': i,
+                'total_chunks': len(chunk_objects),
+                'page': chunk_obj.get('page', None)
+            })
+            
+            # Add the processed chunk
+            processed_chunks.append({
+                'text': chunk_obj['text'],
+                'metadata': chunk_metadata
+            })
+        
+        logger.info(f"Split content into {len(processed_chunks)} chunks")
+        return processed_chunks

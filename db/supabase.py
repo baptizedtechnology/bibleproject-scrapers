@@ -3,6 +3,7 @@ import hashlib
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Union
 import json
+from utils.helpers import create_embedding
 
 from supabase import create_client, Client
 
@@ -80,21 +81,22 @@ class SupabaseManager:
             return False
     
     def add_content_to_index(self, 
-                            url: str, 
+                            download_url: str, 
                             content: str, 
                             title: Optional[str] = None,
                             content_type: str = 'text', 
-                            metadata: Optional[Dict[str, Any]] = None) -> Optional[Dict]:
+                            metadata: Optional[Dict[str, Any]] = None,
+                            source_url: Optional[str] = None) -> Optional[Dict]:
         """
         Add new content to the index if it doesn't exist
         
         Args:
-            url: Content URL
+            download_url: URL to download the content
             content: The actual content text
             title: Optional content title
             content_type: Type of content ('text', 'audio', etc.)
             metadata: Additional metadata as dictionary
-            
+            source_url: Original source URL for content hosted on a site
         Returns:
             dict: The created record or None if content already exists
         """
@@ -103,19 +105,22 @@ class SupabaseManager:
             content_hash = self.compute_content_hash(content)
             
             # Check if content already exists
-            if self.content_exists(url, content_hash):
-                logger.info(f"Content already exists: {url}")
+            if self.content_exists(download_url, content_hash):
+                logger.info(f"Content already exists: {download_url}")
                 return None
                 
             # Prepare record
             record = {
-                'url': url,
+                'chatbot_id': DEFAULT_CHATBOT_ID,
+                'download_url': download_url,
                 'content_hash': content_hash,
                 'content_type': content_type,
+                'text_content': content,
                 'title': title,
                 'status': 'pending',
                 'metadata': metadata,
                 'discovered_at': datetime.now().isoformat(),
+                'source_url': source_url
             }
             
             # Insert record
@@ -219,11 +224,11 @@ class SupabaseManager:
         try:
             data = {
                 'status': status,
-                'processed_at': datetime.now().isoformat(),
+                'last_chunked_at': datetime.now().isoformat(),
             }
             
             if processed_content:
-                data['processed_content'] = processed_content
+                data['text_content'] = processed_content
                 
             if chatbot_source_id:
                 data['chatbot_source_id'] = chatbot_source_id
@@ -239,17 +244,16 @@ class SupabaseManager:
             logger.error(f"Error updating content status: {e}")
             return False
     
-    # This method would be implemented later when we have embedding generation
     def add_to_chatbot_sources(self, 
-                              content: str,
-                              title: str,
-                              source_url: str,
-                              content_type: str = 'website',
-                              chatbot_id: Optional[str] = None,
-                              metadata: Optional[Dict] = None,
-                              content_index_id: Optional[str] = None) -> Optional[str]:
+                            content: str,
+                            title: str,
+                            source_url: str,
+                            content_type: str,
+                            metadata: Dict,
+                            chatbot_id: Optional[str] = None,
+                            content_index_id: Optional[str] = None) -> Optional[str]:
         """
-        Add processed content to chatbot_sources
+        Add processed content to chatbot_sources with embeddings
         
         Args:
             content: The content text
@@ -263,8 +267,47 @@ class SupabaseManager:
         Returns:
             str: ID of created record or None if failed
         """
-        # This is a placeholder - would need real embedding generation
-        logger.info("add_to_chatbot_sources not fully implemented yet")
-        
-        # In a real implementation, generate embeddings and add to chatbot_sources
-        return None
+        try:
+            # Use default chatbot ID if not provided
+            chatbot_id = chatbot_id or DEFAULT_CHATBOT_ID
+            
+            if not chatbot_id:
+                logger.error("No chatbot ID provided or found in config")
+                return None
+                
+            # Generate embedding for content
+            embedding = create_embedding(content)
+            
+            # Handle page number if this is a chunked document
+            if metadata and 'chunk_index' in metadata and content_type == 'article':
+                # Set page number based on chunk index if not already set
+                if 'page' not in metadata or not metadata['page']:
+                    metadata['page'] = metadata['chunk_index'] + 1
+            
+            # Prepare record for chatbot_sources
+            record = {
+                'chatbot_id': chatbot_id,
+                'content': content,
+                'source_url': source_url,
+                'title': title,
+                'type': content_type,
+                'metadata': metadata or {},
+                'embedding': embedding
+            }
+            
+            if content_index_id:
+                record['content_index_id'] = content_index_id
+                
+            # Insert into chatbot_sources
+            result = self.client.table('chatbot_sources').insert(record).execute()
+            
+            if result.data:
+                logger.info(f"Added content to chatbot_sources: {title}")
+                return result.data[0]['id']
+            else:
+                logger.warning(f"Failed to add content to chatbot_sources: {title}")
+                return None
+                
+        except Exception as e:
+            logger.exception(f"Error adding to chatbot_sources: {e}")
+            return None

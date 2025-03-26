@@ -107,27 +107,28 @@ class BaseScraper(ABC):
             logger.error(f"Error downloading {url}: {e}")
             return None
     
-    def add_content(self, url: str, content: str, title: str, 
-                   content_type: str, metadata: Dict) -> bool:
+    def add_content(self, download_url: str, content: str, title: str, 
+                   content_type: str, metadata: Dict, source_url: Optional[str] = None) -> bool:
         """
         Add new content to the index if not already present
         
         Args:
-            url: Content URL
+            download_url: Link to download the content
             content: The content text
             title: Content title
             content_type: Type of content
             metadata: Additional metadata
-            
+            source_url: Original source URL for content hosted on a site (i.e., link to a podcast episode on hosting platform rather than the direct download link)
         Returns:
             bool: True if content was added, False otherwise
         """
         result = self.db.add_content_to_index(
-            url=url,
+            download_url=download_url,
             content=content,
             title=title,
             content_type=content_type,
-            metadata=metadata
+            metadata=metadata,
+            source_url=source_url
         )
         
         if result:
