@@ -67,12 +67,22 @@ class SupabaseManager:
             bool: True if content exists, False otherwise
         """
         try:
+            # First check by content_hash if it exists
+            if content_hash:
+                result = self.client.table('scrape_content_index') \
+                    .select('id') \
+                    .eq('content_hash', content_hash) \
+                    .execute()
+                    
+                if len(result.data) > 0:
+                    return True
+            
+            # If no content_hash or no match found, check by download_url
             result = self.client.table('scrape_content_index') \
                 .select('id') \
-                .eq('content_hash', content_hash) \
+                .eq('download_url', url) \
                 .execute()
                 
-            # If we found a match, content exists
             return len(result.data) > 0
             
         except Exception as e:
@@ -85,6 +95,7 @@ class SupabaseManager:
                             content: str, 
                             title: Optional[str] = None,
                             content_type: str = 'text', 
+                            status: str = 'pending',
                             metadata: Optional[Dict[str, Any]] = None,
                             source_url: Optional[str] = None) -> Optional[Dict]:
         """
@@ -102,7 +113,10 @@ class SupabaseManager:
         """
         try:
             # Generate content hash
-            content_hash = self.compute_content_hash(content)
+            if content:
+                content_hash = self.compute_content_hash(content)
+            else:
+                content_hash = None
             
             # Check if content already exists
             if self.content_exists(download_url, content_hash):
@@ -117,7 +131,7 @@ class SupabaseManager:
                 'content_type': content_type,
                 'text_content': content,
                 'title': title,
-                'status': 'pending',
+                'status': status,
                 'metadata': metadata,
                 'discovered_at': datetime.now().isoformat(),
                 'source_url': source_url

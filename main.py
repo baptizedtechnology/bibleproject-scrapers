@@ -4,7 +4,7 @@ import sys
 from datetime import datetime
 
 # Import scrapers (to be implemented)
-# from scrapers.podcasts import PodcastScraper
+from scrapers.podcasts import PodcastScraper
 # from scrapers.classroom import ClassroomScraper
 from scrapers.study_notes import StudyNotesScraper
 from utils.helpers import cleanup_temp_files
@@ -21,14 +21,21 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-def scrape_podcasts():
+def scrape_podcasts(full_scrape: bool = False):
     """
     Scrape BibleProject podcast content
+    
+    Args:
+        full_scrape: If True, scrape all podcasts. If False, only check first 20 for new content.
     """
-    logger.info("Starting podcast scraper")
-    # podcast_scraper = PodcastScraper()
-    # podcast_scraper.scrape()
-    logger.info("Podcast scraping not yet implemented")
+    logger.info(f"Starting podcast scraper in {'full' if full_scrape else 'new content'} mode")
+    podcast_scraper = PodcastScraper(full_scrape=full_scrape)
+    success = podcast_scraper.scrape()
+    
+    if success:
+        logger.info(f"Podcast scraping completed successfully. Found {podcast_scraper.items_found} items, added {podcast_scraper.items_new} new items.")
+    else:
+        logger.error("Podcast scraping failed")
 
 def scrape_classroom():
     """
@@ -73,6 +80,7 @@ def main():
     parser.add_argument('--study-notes', action='store_true', help='Scrape study notes')
     parser.add_argument('--process', action='store_true', help='Process pending content')
     parser.add_argument('--full', action='store_true', help='Run full scrape (all content types)')
+    parser.add_argument('--full-podcasts', action='store_true', help='Run full podcast scrape (all podcasts)')
     
     args = parser.parse_args()
     
@@ -84,7 +92,7 @@ def main():
     try:
         # Determine what to run based on arguments
         if args.podcasts or args.full:
-            scrape_podcasts()
+            scrape_podcasts(full_scrape=args.full_podcasts)
             
         if args.classroom or args.full:
             scrape_classroom()

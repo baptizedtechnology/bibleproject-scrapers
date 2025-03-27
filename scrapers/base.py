@@ -108,7 +108,8 @@ class BaseScraper(ABC):
             return None
     
     def add_content(self, download_url: str, content: str, title: str, 
-                   content_type: str, metadata: Dict, source_url: Optional[str] = None) -> bool:
+                   content_type: str, metadata: Dict, status: str = 'pending',
+                   source_url: Optional[str] = None) -> bool:
         """
         Add new content to the index if not already present
         
@@ -126,6 +127,7 @@ class BaseScraper(ABC):
             download_url=download_url,
             content=content,
             title=title,
+            status=status,
             content_type=content_type,
             metadata=metadata,
             source_url=source_url
