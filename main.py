@@ -58,14 +58,18 @@ def scrape_study_notes():
     else:
         logger.error("Study notes scraping failed")
 
-def process_pending():
+def process_pending(content_type: str = None, limit: int = None):
     """
     Process any pending content (transcribe audio, create embeddings)
+    
+    Args:
+        content_type: Type of content to process (e.g. 'podcast', 'classroom', 'study_notes')
+        limit: Maximum number of items to process
     """
-    logger.info("Processing pending content")
+    logger.info(f"Processing pending content (type: {content_type}, limit: {limit})")
     from processors.runner import process_pending_content
     
-    processed_count = process_pending_content()
+    processed_count = process_pending_content(content_type=content_type, limit=limit)
     
     if processed_count > 0:
         logger.info(f"Successfully processed {processed_count} pending items")
@@ -81,6 +85,8 @@ def main():
     parser.add_argument('--process', action='store_true', help='Process pending content')
     parser.add_argument('--full', action='store_true', help='Run full scrape (all content types)')
     parser.add_argument('--full-podcasts', action='store_true', help='Run full podcast scrape (all podcasts)')
+    parser.add_argument('--content-type', type=str, help='Type of content to process (e.g. podcast, classroom, study_notes)')
+    parser.add_argument('--limit', type=int, help='Maximum number of items to process')
     
     args = parser.parse_args()
     
@@ -101,7 +107,7 @@ def main():
             scrape_study_notes()
             
         if args.process or args.full:
-            process_pending()
+            process_pending(content_type=args.content_type, limit=args.limit)
             
         logger.info("Scraping completed successfully")
         cleanup_temp_files()

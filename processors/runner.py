@@ -2,12 +2,12 @@ import logging
 from typing import Optional
 
 from processors.text import TextProcessor
-# from processors.audio import AudioProcessor
+from processors.audio import AudioProcessor
 import config
 
 logger = logging.getLogger(__name__)
 
-def process_pending_content(content_type: Optional[str] = None, limit: int = 10) -> int:
+def process_pending_content(content_type: Optional[str] = None, limit: int = 40) -> int:
     """
     Process pending content in the database
     
@@ -28,10 +28,12 @@ def process_pending_content(content_type: Optional[str] = None, limit: int = 10)
         logger.info(f"Processed {processed} text items")
     
     if content_type in [None, 'podcast', 'speech', 'video']:
-        # Audio processor not fully implemented yet
-        # audio_processor = AudioProcessor()
-        # processed = audio_processor.process_pending_items(limit=limit)
-        # total_processed += processed
-        logger.info("Audio processing not yet implemented")
+        audio_processor = AudioProcessor()
+        # Process new podcasts (audio files that need transcription)
+        processed_new = audio_processor.process_new_podcasts(limit=limit)
+        processed_pending = audio_processor.process_pending_podcasts(limit=limit)
+        total_processed += processed_new + processed_pending
+        logger.info(f"Processed {processed_new} new podcast items")
+        logger.info(f"Processed {processed_pending} pending podcast items")
     
     return total_processed

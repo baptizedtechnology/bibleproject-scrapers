@@ -150,12 +150,10 @@ class PodcastScraper(BaseScraper):
     def _store_podcast(self, podcast: Dict, download_url: str) -> bool:
         """Store podcast information in Supabase"""
         metadata = {
-            'podcast': {
-                'episode_number': podcast['episode_number'],
-                'episode_title': podcast['title'],
-                'timestamp': None,  # Will be added during chunking
-                'duration': podcast['duration']
-            }
+            'episode_number': podcast['episode_number'],
+            'episode_title': podcast['title'],
+            'timestamp': None,  # Will be added during chunking
+            'duration': podcast['duration']
         }
         
         return self.add_content(

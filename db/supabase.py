@@ -218,6 +218,34 @@ class SupabaseManager:
             logger.error(f"Error getting pending content: {e}")
             return []
     
+    def get_content_by_status(self, status: str, content_type: Optional[str] = None, limit: int = 100) -> List[Dict]:
+        """
+        Get content by status
+        
+        Args:
+            status: Status to filter by ('new', 'pending', 'processed', 'failed')
+            content_type: Optional filter by content type
+            limit: Maximum number of items to retrieve
+            
+        Returns:
+            list: List of content items
+        """
+        try:
+            query = self.client.table('scrape_content_index') \
+                .select('*') \
+                .eq('status', status) \
+                .limit(limit)
+                
+            if content_type:
+                query = query.eq('content_type', content_type)
+                
+            result = query.execute()
+            return result.data
+            
+        except Exception as e:
+            logger.error(f"Error getting content by status: {e}")
+            return []
+    
     def update_content_status(self, 
                              content_id: str, 
                              status: str, 
@@ -256,6 +284,60 @@ class SupabaseManager:
             
         except Exception as e:
             logger.error(f"Error updating content status: {e}")
+            return False
+    
+    def update_content(self,
+                      content_id: str,
+                      content: Optional[str] = None,
+                      content_hash: Optional[str] = None,
+                      status: Optional[str] = None,
+                      metadata: Optional[Dict] = None,
+                      whisper_json_response: Optional[Dict] = None) -> bool:
+        """
+        Update content in the index
+        
+        Args:
+            content_id: ID of the content record
+            content: New content text
+            content_hash: Hash of the content
+            status: New status
+            metadata: Updated metadata
+            whisper_json_response: Full Whisper API response for audio transcriptions
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            data = {}
+            
+            if content:
+                data['text_content'] = content
+                
+            if content_hash:
+                data['content_hash'] = content_hash
+                
+            if status:
+                data['status'] = status
+                
+            if metadata:
+                data['metadata'] = metadata
+                
+            if whisper_json_response:
+                data['whisper_json_response'] = whisper_json_response
+                
+            if not data:
+                logger.warning("No data provided for content update")
+                return False
+            
+            self.client.table('scrape_content_index') \
+                .update(data) \
+                .eq('id', content_id) \
+                .execute()
+                
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error updating content: {e}")
             return False
     
     def add_to_chatbot_sources(self, 
@@ -324,4 +406,28 @@ class SupabaseManager:
                 
         except Exception as e:
             logger.exception(f"Error adding to chatbot_sources: {e}")
+            return None
+    
+    def get_content_by_id(self, content_id: str) -> Optional[Dict]:
+        """
+        Get content by ID
+        
+        Args:
+            content_id: ID of the content record
+            
+        Returns:
+            dict: Content record or None if not found
+        """
+        try:
+            result = self.client.table('scrape_content_index') \
+                .select('*') \
+                .eq('id', content_id) \
+                .execute()
+                
+            if result.data:
+                return result.data[0]
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting content by ID: {e}")
             return None
