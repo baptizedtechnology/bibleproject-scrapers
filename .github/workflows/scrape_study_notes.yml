@@ -1,0 +1,45 @@
+name: Run Bible Project Study Notes Scraper
+
+on:
+  schedule:
+    # Run at 00:00 UTC on the 1st of every month
+    - cron: '0 0 1 * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Run scraper
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      run: |
+        echo "Starting Bible Project Study Notes scraper..."
+        echo "Running study notes scraper..."
+        python main.py --study-notes
+        echo "Running study notes processor..."
+        python main.py --process --content-type article --limit None
+        echo "Scraping completed"
+        
+    - name: Upload logs
+      uses: actions/upload-artifact@v4
+      with:
+        name: study-notes-logs
+        path: |
+          bibleproject_scrape_*.log
+        retention-days: 7 
