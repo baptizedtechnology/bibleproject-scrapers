@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 class AudioProcessor:
     """Process audio files using OpenAI's Whisper model"""
     
-    def __init__(self):
+    def __init__(self, content_type: Optional[str] = None):
+        self.content_type = content_type
         self.client = OpenAI(api_key=OPENAI_API_KEY)
         self.temp_dir = Path(tempfile.gettempdir()) / "bibleproject_audio"
         self.temp_dir.mkdir(parents=True, exist_ok=True)

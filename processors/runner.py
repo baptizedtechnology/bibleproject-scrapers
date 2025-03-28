@@ -22,13 +22,13 @@ def process_pending_content(content_type: Optional[str] = None, limit: int = 40)
     
     # Initialize processors based on content type
     if content_type in [None, 'article', 'book', 'text', 'research_paper', 'blog', 'website', 'bible']:
-        text_processor = TextProcessor()
+        text_processor = TextProcessor(content_type=content_type)
         processed = text_processor.process_pending_items(limit=limit)
         total_processed += processed
         logger.info(f"Processed {processed} text items")
     
     if content_type in [None, 'podcast', 'speech', 'video']:
-        audio_processor = AudioProcessor()
+        audio_processor = AudioProcessor(content_type=content_type)
         # Process new podcasts (audio files that need transcription)
         processed_new = audio_processor.process_new_podcasts(limit=limit)
         processed_pending = audio_processor.process_pending_podcasts(limit=limit)

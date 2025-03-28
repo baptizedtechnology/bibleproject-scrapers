@@ -48,7 +48,7 @@ class BaseProcessor(ABC):
         Returns:
             Number of successfully processed items
         """
-
+        logger.info(f"Processing pending items for content type: {self.content_type}")
         #Returns DB entries from 'scrape_content_index' table that are pending
         pending_items = self.db.get_pending_content(content_type=self.content_type, limit=limit)
         processed_count = 0
