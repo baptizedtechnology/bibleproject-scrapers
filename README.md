@@ -38,7 +38,7 @@ bibleproject-scrapers/
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/bibleproject-scrapers.git
+git clone https://github.com/baptizedtechnology/bibleproject-scrapers
 cd bibleproject-scrapers
 ```
 
