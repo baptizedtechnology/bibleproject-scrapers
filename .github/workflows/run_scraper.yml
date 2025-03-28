@@ -37,7 +37,7 @@ jobs:
         echo "Scraping completed"
         
     - name: Upload transcription results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v3.1.2
       with:
         name: transcription-results
         path: |
@@ -45,7 +45,7 @@ jobs:
         retention-days: 7
         
     - name: Upload logs
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v3.1.2
       with:
         name: scraper-logs
         path: |
