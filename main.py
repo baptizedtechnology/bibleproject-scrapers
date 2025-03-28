@@ -58,7 +58,7 @@ def scrape_study_notes():
     else:
         logger.error("Study notes scraping failed")
 
-def process_pending(content_type: str = None, limit: int = None):
+def process_pending(content_type: str = None, limit: int = 40):
     """
     Process any pending content (transcribe audio, create embeddings)
     
