@@ -106,8 +106,10 @@ def main():
         if args.study_notes or args.full:
             scrape_study_notes()
             
-        if args.process or args.full:
-            process_pending(content_type=args.content_type, limit=args.limit)
+        if args.process or args.full:           
+            # Set default limit if not specified
+            limit = args.limit if args.limit is not None else 40
+            process_pending(content_type=args.content_type, limit=limit)
             
         logger.info("Scraping completed successfully")
         cleanup_temp_files()

@@ -33,7 +33,7 @@ jobs:
         echo "Running podcast scraper..."
         python main.py --podcasts
         echo "Running podcast processor..."
-        python main.py --process
+        python main.py --process --content-type podcast --limit 40
         echo "Scraping completed"
         
     - name: Upload transcription results
