@@ -4,6 +4,9 @@ A collection of scrapers and processors for Bible Project content, designed to c
 
 ## Project Status
 
+May 1, 2025
+- Stopped the scraper for now. Plenty of similar tools to this out in the world, so I'll likely spend time working with others.
+
 As of March 28, 2025:
 - 60 podcasts are currently transcribed and chunked in the database
 - Monthly processing of 40 additional podcasts (to manage Whisper API costs)
